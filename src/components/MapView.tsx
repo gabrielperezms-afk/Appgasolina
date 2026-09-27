@@ -157,7 +157,7 @@ export default function MapView({
               : "Sin producto";
           const badgeColor = ICON_COLORS[status] ?? ICON_COLORS.desconocido;
           iw.setContent(
-            `<div style="font-family:inherit;font-size:13px;line-height:1.4;max-width:220px">` +
+            `<div style="font-family:inherit;font-size:13px;line-height:1.4;max-width:220px;color:#1f2937">` +
               `<strong>${escapeHtml(st.nombre)}</strong><br/>${
                 st.direccion ? escapeHtml(st.direccion) + ", " : ""
               }${escapeHtml(st.provincia)}` +
