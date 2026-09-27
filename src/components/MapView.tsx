@@ -12,13 +12,20 @@ const ICON_COLORS: Record<string, string> = {
   desconocido: "#a1a1aa",
 };
 
+const PIN_PATH =
+  "M172.268 501.67C26.97 291.031 0 269.413 0 192 0 85.961 85.961 0 192 0s192 85.961 192 192c0 77.413-26.97 99.031-172.268 309.67-9.535 13.774-29.93 13.773-39.464 0zM192 272c44.183 0 80-35.817 80-80s-35.817-80-80-80-80 35.817-80 80 35.817 80 80 80z";
+
 function makeIcon(color: string, big: boolean) {
-  const size = big ? 26 : 18;
+  const w = big ? 30 : 22;
+  const h = Math.round((w * 512) / 384);
   return L.divIcon({
     className: "",
-    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
+    html: `<svg width="${w}" height="${h}" viewBox="0 0 384 512" xmlns="http://www.w3.org/2000/svg" style="filter:drop-shadow(0 2px 2px rgba(0,0,0,.45))">
+      <path fill-rule="evenodd" d="${PIN_PATH}" fill="${color}" stroke="white" stroke-width="14"/>
+    </svg>`,
+    iconSize: [w, h],
+    iconAnchor: [w / 2, h],
+    popupAnchor: [0, -h + 4],
   });
 }
 
