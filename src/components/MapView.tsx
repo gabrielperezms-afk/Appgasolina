@@ -145,9 +145,11 @@ export default function MapView({
         const iw = infoWindowRef.current;
         if (iw) {
           iw.setContent(
-            `<strong>${escapeHtml(st.nombre)}</strong><br/>${
-              st.direccion ? escapeHtml(st.direccion) + ", " : ""
-            }${escapeHtml(st.provincia)}`
+            `<div style="font-family:inherit;font-size:13px;line-height:1.4;max-width:220px">` +
+              `<strong>${escapeHtml(st.nombre)}</strong><br/>${
+                st.direccion ? escapeHtml(st.direccion) + ", " : ""
+              }${escapeHtml(st.provincia)}` +
+              `</div>`
           );
           iw.open({ map, anchor: marker });
         }
