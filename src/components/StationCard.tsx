@@ -39,8 +39,8 @@ export default function StationCard({
         )}
       </p>
       <div className="mt-2 flex flex-wrap gap-1.5">
-        <StatusBadge status={station.ron_premium} label="Premium" />
-        <StatusBadge status={station.ron_regular} label="Regular" />
+        <StatusBadge status={station.ron_premium} label="Premium" fuel="premium" />
+        <StatusBadge status={station.ron_regular} label="Regular" fuel="regular" />
       </div>
     </button>
   );
