@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import { useEffect, useRef, useState } from "react";
+import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import type { FuelType, StationWithDistance } from "@/lib/types";
 
 const ICON_COLORS: Record<string, string> = {
@@ -15,18 +14,44 @@ const ICON_COLORS: Record<string, string> = {
 const PIN_PATH =
   "M172.268 501.67C26.97 291.031 0 269.413 0 192 0 85.961 85.961 0 192 0s192 85.961 192 192c0 77.413-26.97 99.031-172.268 309.67-9.535 13.774-29.93 13.773-39.464 0zM192 272c44.183 0 80-35.817 80-80s-35.817-80-80-80-80 35.817-80 80 35.817 80 80 80z";
 
-function makeIcon(color: string, big: boolean) {
-  const w = big ? 30 : 22;
-  const h = Math.round((w * 512) / 384);
-  return L.divIcon({
-    className: "",
-    html: `<svg width="${w}" height="${h}" viewBox="0 0 384 512" xmlns="http://www.w3.org/2000/svg" style="filter:drop-shadow(0 2px 2px rgba(0,0,0,.45))">
-      <path fill-rule="evenodd" d="${PIN_PATH}" fill="${color}" stroke="white" stroke-width="14"/>
-    </svg>`,
-    iconSize: [w, h],
-    iconAnchor: [w / 2, h],
-    popupAnchor: [0, -h + 4],
-  });
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+let loaderPromise: Promise<void> | null = null;
+
+function loadGoogleMaps(): Promise<void> {
+  if (loaderPromise) return loaderPromise;
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    loaderPromise = Promise.reject(
+      new Error("Falta configurar NEXT_PUBLIC_GOOGLE_MAPS_API_KEY")
+    );
+    return loaderPromise;
+  }
+  setOptions({ key: apiKey, v: "weekly" });
+  loaderPromise = Promise.all([
+    importLibrary("maps"),
+    importLibrary("marker"),
+  ]).then(() => undefined);
+  return loaderPromise;
+}
+
+function pinIcon(color: string, big: boolean): google.maps.Symbol {
+  const width = big ? 30 : 22;
+  return {
+    path: PIN_PATH,
+    fillColor: color,
+    fillOpacity: 1,
+    strokeColor: "white",
+    strokeWeight: 1.5,
+    scale: width / 384,
+    anchor: new google.maps.Point(192, 500),
+  };
 }
 
 export default function MapView({
@@ -42,41 +67,55 @@ export default function MapView({
   userLocation: { lat: number; lon: number } | null;
   onSelect: (id: number) => void;
 }) {
-  const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const markersRef = useRef<Map<number, L.Marker>>(new Map());
-  const userMarkerRef = useRef<L.Marker | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const markersRef = useRef<Map<number, google.maps.Marker>>(new Map());
+  const userMarkerRef = useRef<google.maps.Marker | null>(null);
+  const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
+  const [ready, setReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
-    const map = L.map(containerRef.current, {
-      center: [18.7357, -70.1627],
-      zoom: 8,
-    });
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap contributors",
-      maxZoom: 19,
-    }).addTo(map);
-    mapRef.current = map;
-
-    const resizeObserver = new ResizeObserver(() => {
-      map.invalidateSize();
-    });
-    resizeObserver.observe(containerRef.current);
-
+    let cancelled = false;
+    if (!containerRef.current) return;
+    loadGoogleMaps()
+      .then(() => {
+        if (cancelled || !containerRef.current || mapRef.current) return;
+        const map = new google.maps.Map(containerRef.current, {
+          center: { lat: 18.7357, lng: -70.1627 },
+          zoom: 8,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+        });
+        mapRef.current = map;
+        infoWindowRef.current = new google.maps.InfoWindow();
+        setReady(true);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setLoadError(err.message);
+      });
     return () => {
-      resizeObserver.disconnect();
-      map.remove();
-      mapRef.current = null;
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally read at cleanup time
-      markersRef.current.clear();
-      userMarkerRef.current = null;
+      cancelled = true;
     };
   }, []);
 
   useEffect(() => {
+    if (!ready || !containerRef.current) return;
     const map = mapRef.current;
     if (!map) return;
+    const ro = new ResizeObserver(() => {
+      const center = map.getCenter();
+      google.maps.event.trigger(map, "resize");
+      if (center) map.setCenter(center);
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, [ready]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
     const existing = markersRef.current;
     const seen = new Set<number>();
 
@@ -85,53 +124,76 @@ export default function MapView({
       seen.add(st.id);
       const status = fuelType === "premium" ? st.ron_premium : st.ron_regular;
       const isSelected = st.id === selectedId;
-      const icon = makeIcon(ICON_COLORS[status] ?? ICON_COLORS.desconocido, isSelected);
+      const icon = pinIcon(ICON_COLORS[status] ?? ICON_COLORS.desconocido, isSelected);
       let marker = existing.get(st.id);
       if (!marker) {
-        marker = L.marker([st.lat, st.lon], { icon });
-        marker.on("click", () => onSelect(st.id));
-        marker.addTo(map);
+        marker = new google.maps.Marker({
+          position: { lat: st.lat, lng: st.lon },
+          map,
+          icon,
+        });
+        marker.addListener("click", () => onSelect(st.id));
         existing.set(st.id, marker);
       } else {
-        marker.setLatLng([st.lat, st.lon]);
+        marker.setPosition({ lat: st.lat, lng: st.lon });
         marker.setIcon(icon);
       }
-      marker.bindPopup(
-        `<strong>${st.nombre}</strong><br/>${st.direccion ? st.direccion + ", " : ""}${st.provincia}`
-      );
+      marker.setZIndex(isSelected ? 999 : 1);
       if (isSelected) {
-        map.setView([st.lat, st.lon], Math.max(map.getZoom(), 13), { animate: true });
-        marker.openPopup();
+        map.panTo({ lat: st.lat, lng: st.lon });
+        if ((map.getZoom() ?? 8) < 13) map.setZoom(13);
+        const iw = infoWindowRef.current;
+        if (iw) {
+          iw.setContent(
+            `<strong>${escapeHtml(st.nombre)}</strong><br/>${
+              st.direccion ? escapeHtml(st.direccion) + ", " : ""
+            }${escapeHtml(st.provincia)}`
+          );
+          iw.open({ map, anchor: marker });
+        }
       }
     }
 
     for (const [id, marker] of existing) {
       if (!seen.has(id)) {
-        marker.remove();
+        marker.setMap(null);
         existing.delete(id);
       }
     }
-  }, [stations, fuelType, selectedId, onSelect]);
+  }, [ready, stations, fuelType, selectedId, onSelect]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
-    if (userLocation) {
-      if (!userMarkerRef.current) {
-        userMarkerRef.current = L.marker([userLocation.lat, userLocation.lon], {
-          icon: L.divIcon({
-            className: "",
-            html: `<div style="width:16px;height:16px;border-radius:50%;background:#3b82f6;border:3px solid white;box-shadow:0 0 0 3px rgba(59,130,246,.4)"></div>`,
-            iconSize: [16, 16],
-            iconAnchor: [8, 8],
-          }),
-        }).addTo(map);
-      } else {
-        userMarkerRef.current.setLatLng([userLocation.lat, userLocation.lon]);
-      }
-      map.setView([userLocation.lat, userLocation.lon], 13);
+    if (!ready || !map || !userLocation) return;
+    const pos = { lat: userLocation.lat, lng: userLocation.lon };
+    if (!userMarkerRef.current) {
+      userMarkerRef.current = new google.maps.Marker({
+        position: pos,
+        map,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 8,
+          fillColor: "#3b82f6",
+          fillOpacity: 1,
+          strokeColor: "white",
+          strokeWeight: 3,
+        },
+        zIndex: 1000,
+      });
+    } else {
+      userMarkerRef.current.setPosition(pos);
     }
-  }, [userLocation]);
+    map.panTo(pos);
+    map.setZoom(13);
+  }, [ready, userLocation]);
+
+  if (loadError) {
+    return (
+      <div className="h-full w-full rounded-xl flex items-center justify-center bg-zinc-100 dark:bg-zinc-800 p-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
+        No se pudo cargar Google Maps ({loadError}). Verifica la API key configurada.
+      </div>
+    );
+  }
 
   return <div ref={containerRef} className="h-full w-full rounded-xl" />;
 }
