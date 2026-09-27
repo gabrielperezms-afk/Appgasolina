@@ -4,6 +4,7 @@ import { useMemo, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { stations, provincias, statusRank } from "@/lib/stations";
 import { haversineKm } from "@/lib/distance";
+import { normalizeText } from "@/lib/text";
 import type { FuelType, StationWithDistance } from "@/lib/types";
 import FiltersBar, { type SortMode } from "@/components/FiltersBar";
 import StationCard from "@/components/StationCard";
@@ -53,10 +54,14 @@ export default function Home() {
   }, [userLocation]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = normalizeText(query.trim());
     let list = withDistance.filter((s) => {
       if (provincia && s.provincia !== provincia) return false;
-      if (q && !s.nombre.toLowerCase().includes(q) && !s.direccion.toLowerCase().includes(q))
+      if (
+        q &&
+        !normalizeText(s.nombre).includes(q) &&
+        !normalizeText(s.direccion).includes(q)
+      )
         return false;
       if (onlyApproved) {
         const status = fuelType === "premium" ? s.ron_premium : s.ron_regular;
