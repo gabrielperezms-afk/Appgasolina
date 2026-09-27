@@ -34,3 +34,23 @@ body {
   overflow: hidden !important;
   padding: 0 !important;
 }
+/* The default close button reserves a 48x48px row above the content even
+   though its icon is small — that's what reads as a big empty gap. */
+.gm-style .gm-style-iw-chr {
+  height: 0 !important;
+  overflow: visible !important;
+}
+.gm-style .gm-style-iw-chr button.gm-ui-hover-effect {
+  width: 24px !important;
+  height: 24px !important;
+  top: 2px !important;
+  right: 2px !important;
+}
+.gm-style .gm-style-iw-chr button.gm-ui-hover-effect span {
+  width: 24px !important;
+  height: 24px !important;
+  margin: 0 !important;
+  mask-size: contain !important;
+  mask-repeat: no-repeat !important;
+  mask-position: center !important;
+}

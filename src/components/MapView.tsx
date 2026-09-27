@@ -11,6 +11,11 @@ const ICON_COLORS: Record<string, string> = {
   desconocido: "#a1a1aa",
 };
 
+const RON_THRESHOLD: Record<FuelType, { pass: number; fail: number }> = {
+  premium: { pass: 94.5, fail: 94.4 },
+  regular: { pass: 88.5, fail: 88.4 },
+};
+
 const PIN_PATH =
   "M172.268 501.67C26.97 291.031 0 269.413 0 192 0 85.961 85.961 0 192 0s192 85.961 192 192c0 77.413-26.97 99.031-172.268 309.67-9.535 13.774-29.93 13.773-39.464 0zM192 272c44.183 0 80-35.817 80-80s-35.817-80-80-80-80 35.817-80 80 35.817 80 80 80z";
 
@@ -144,11 +149,21 @@ export default function MapView({
         if ((map.getZoom() ?? 8) < 13) map.setZoom(13);
         const iw = infoWindowRef.current;
         if (iw) {
+          const ronText =
+            status === "aprobado"
+              ? `RON ≥ ${RON_THRESHOLD[fuelType].pass}`
+              : status === "no_aprobado"
+              ? `RON ≤ ${RON_THRESHOLD[fuelType].fail}`
+              : "Sin producto";
+          const badgeColor = ICON_COLORS[status] ?? ICON_COLORS.desconocido;
           iw.setContent(
             `<div style="font-family:inherit;font-size:13px;line-height:1.4;max-width:220px">` +
               `<strong>${escapeHtml(st.nombre)}</strong><br/>${
                 st.direccion ? escapeHtml(st.direccion) + ", " : ""
               }${escapeHtml(st.provincia)}` +
+              `<div style="text-align:right;margin-top:5px">` +
+              `<span style="background:${badgeColor};color:white;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;white-space:nowrap">${ronText}</span>` +
+              `</div>` +
               `</div>`
           );
           iw.open({ map, anchor: marker });
